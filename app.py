@@ -4,15 +4,10 @@ from src.interview_logic import EXCEL_QUESTIONS
 from src.local_llm_handler import load_llm_pipeline
 from src.perplexity_detector import load_detector_model
 
-# Initialize the graph
 graph = build_graph()
 
 def run_graph_logic(history: list[dict[str, str]]):
-    """
-    This helper function contains the core logic for running the LangGraph chain.
-    """
-    # --- THIS BLOCK CONTAINS THE CRITICAL FIX ---
-    # 1. Correctly convert Gradio's history (list of dicts) into our graph's internal format.
+
     internal_history = []
     for turn in history:
         if turn["role"] == "user":
@@ -27,7 +22,6 @@ def run_graph_logic(history: list[dict[str, str]]):
 
     len_before = len(internal_history)
 
-    # 2. Build the state dictionary. This logic is now correct because internal_history is correct.
     question_count = sum(1 for role, content in internal_history if content in EXCEL_QUESTIONS)
     current_question_index = question_count - 1 if question_count > 0 else 0
     
@@ -49,9 +43,7 @@ def run_graph_logic(history: list[dict[str, str]]):
 
 
 def user_sends_message(user_message: str, history: list[dict[str, str]]):
-    """
-    This function correctly receives the new user_message and the history.
-    """
+
     history.append({"role": "user", "content": user_message})
     bot_response = run_graph_logic(history)
     history.append({"role": "assistant", "content": bot_response})
@@ -59,18 +51,12 @@ def user_sends_message(user_message: str, history: list[dict[str, str]]):
 
 
 def clear_chat():
-    """Returns an empty list for the chatbot and an empty string for the textbox."""
     return [], ""
 
 
-# --- UI CODE (No changes needed here) ---
 with gr.Blocks(theme="soft", css=".gradio-container {max-width: 1200px; margin: 0 auto;}") as demo:
     gr.Markdown(
-        """
-        # 🤖 AI-Powered Excel Interviewer (Phi-3 Mini)
-        An AI-powered interview system that asks Excel-related questions and provides feedback. 
-        Click one of the examples or type a message like 'start' to begin.
-        """
+
     )
 
     chatbot = gr.Chatbot(
