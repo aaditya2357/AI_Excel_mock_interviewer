@@ -1,0 +1,15 @@
+# Pin Gradio to a known stable version
+torch
+gradio==5.0.0
+
+# PyTorch must be listed first as other libraries depend on it during installation
+
+# Pin transformers and accelerate to fix compatibility bugs with Phi-3
+transformers==4.42.3
+accelerate==0.32.1
+
+# A dependency for attention mechanisms, good to have
+einops
+
+# LangGraph itself
+langgraph
