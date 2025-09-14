@@ -1,26 +1,33 @@
-import streamlit as st
+import gradio as gr
 from src.graph import build_graph
 from src.interview_logic import EXCEL_QUESTIONS
 from src.local_llm_handler import load_llm_pipeline
 from src.perplexity_detector import load_detector_model
 
-
+# Initialize the graph
 graph = build_graph()
 
 def run_graph_logic(history: list[dict[str, str]]):
-    """Run the LangGraph chain with proper history conversion."""
+    """
+    This helper function contains the core logic for running the LangGraph chain.
+    """
+    # --- THIS BLOCK CONTAINS THE CRITICAL FIX ---
+    # 1. Correctly convert Gradio's history (list of dicts) into our graph's internal format.
     internal_history = []
     for turn in history:
         if turn["role"] == "user":
             internal_history.append(("user", turn["content"]))
         elif turn["role"] == "assistant":
+            # Split combined bot messages back into their original parts.
+            # This is the key to correctly calculating question_count.
             parts = turn["content"].split("\n\n")
             for part in parts:
-                if part.strip():
-                    internal_history.append(("ai", part))
+                if part.strip(): # Ensure we don't add empty parts
+                    internal_history.append(("ai", part)) # Use "ai" as expected by the graph
 
     len_before = len(internal_history)
 
+    # 2. Build the state dictionary. This logic is now correct because internal_history is correct.
     question_count = sum(1 for role, content in internal_history if content in EXCEL_QUESTIONS)
     current_question_index = question_count - 1 if question_count > 0 else 0
     
@@ -29,9 +36,10 @@ def run_graph_logic(history: list[dict[str, str]]):
         "interview_history": internal_history,
         "questions": EXCEL_QUESTIONS,
         "question_index": current_question_index,
-        "evaluations": [],
+        "evaluations": [], 
     }
 
+    print(f"Invoking graph. Question count: {question_count}. Using index: {current_question_index}.")
     new_state = graph.invoke(current_state)
     
     new_messages = new_state["interview_history"][len_before:]
@@ -40,50 +48,79 @@ def run_graph_logic(history: list[dict[str, str]]):
     return "\n\n".join(bot_responses)
 
 
-st.set_page_config(page_title="AI-Powered Excel Interviewer", layout="wide")
-
-st.markdown(
+def user_sends_message(user_message: str, history: list[dict[str, str]]):
     """
-    # 🤖 AI-Powered Excel Interviewer (Phi-3 Mini)
-    An AI-powered interview system that asks Excel-related questions and provides feedback.  
-    Type a message like **'start'** to begin.
+    This function correctly receives the new user_message and the history.
     """
-)
-
-if "history" not in st.session_state:
-    st.session_state.history = []
-
-for msg in st.session_state.history:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-
-if user_input := st.chat_input("Type your answer here..."):
-
-    st.session_state.history.append({"role": "user", "content": user_input})
-
- 
-    bot_response = run_graph_logic(st.session_state.history)
+    history.append({"role": "user", "content": user_message})
+    bot_response = run_graph_logic(history)
+    history.append({"role": "assistant", "content": bot_response})
+    return history, ""
 
 
-    st.session_state.history.append({"role": "assistant", "content": bot_response})
-
-  
-    with st.chat_message("assistant", avatar="https://upload.wikimedia.org/wikipedia/commons/7/73/Microsoft_Excel_2013-2019_logo.svg"):
-        st.markdown(bot_response)
+def clear_chat():
+    """Returns an empty list for the chatbot and an empty string for the textbox."""
+    return [], ""
 
 
-if st.button("🔄 Clear and Restart Interview"):
-    st.session_state.history = []
-    st.rerun()
+# --- UI CODE (No changes needed here) ---
+with gr.Blocks(theme="soft", css=".gradio-container {max-width: 1200px; margin: 0 auto;}") as demo:
+    gr.Markdown(
+        """
+        # 🤖 AI-Powered Excel Interviewer (Phi-3 Mini)
+        An AI-powered interview system that asks Excel-related questions and provides feedback. 
+        Click one of the examples or type a message like 'start' to begin.
+        """
+    )
 
+    chatbot = gr.Chatbot(
+        label="Interview Conversation",
+        type="messages",
+        height=600,
+        show_copy_button=True,
+        placeholder="The interview will begin after you send your first message.",
+        avatar_images=(None, "https://upload.wikimedia.org/wikipedia/commons/1/1d/Microsoft_Excel_2013-2019_logo.svg")
+    )
 
-@st.cache_resource
-def preload_models():
-    load_llm_pipeline()
-    load_detector_model()
-    return "Models loaded successfully"
+    with gr.Row():
+        user_input = gr.Textbox(
+            show_label=False,
+            placeholder="Type your answer here and press Enter...",
+            scale=5
+        )
+        submit_btn = gr.Button("Submit", variant="primary", scale=1)
 
-try:
-    preload_models()
-except Exception as e:
-    st.error(f"FATAL ERROR: Could not pre-load models: {e}")
+    with gr.Row():
+        clear_btn = gr.Button("Clear and Restart Interview", variant="stop")
+        gr.Examples(
+            examples=["I'm ready to start the interview", "Let's begin", "Start the assessment"],
+            inputs=user_input
+        )
+
+    submit_btn.click(
+        fn=user_sends_message,
+        inputs=[user_input, chatbot],
+        outputs=[chatbot, user_input]
+    )
+    user_input.submit(
+        fn=user_sends_message,
+        inputs=[user_input, chatbot],
+        outputs=[chatbot, user_input]
+    )
+    clear_btn.click(
+        fn=clear_chat,
+        inputs=None,
+        outputs=[chatbot, user_input],
+        queue=False
+    )
+
+if __name__ == "__main__":
+    print("--- Pre-loading models on application startup... ---")
+    try:
+        load_llm_pipeline()
+        load_detector_model()
+        print("--- All models pre-loaded successfully. Starting Gradio server. ---")
+    except Exception as e:
+        print(f"--- FATAL ERROR: Could not pre-load models: {e} ---")
+
+    demo.launch(debug=True, show_error=True)
