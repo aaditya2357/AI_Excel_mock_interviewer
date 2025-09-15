@@ -12,3 +12,5 @@ This repo contains a runnable PoC: frontend (Gradio), a simple LangGraph-driven 
 - `samples/` — sample transcripts & spreadsheets (add)
 - `docs/design.md` — design doc (this repo)
 
+## If you want to check the deploy link
+https://huggingface.co/spaces/akunity2357/ai
